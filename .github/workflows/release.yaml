@@ -1,0 +1,81 @@
+name: Upload Release Asset
+
+on:
+  push:
+    # Sequence of patterns matched against refs/tags
+    tags:
+      - 'v*' # Push events to matching v*, i.e. v1.0, v20.15.10
+
+jobs:
+  build:
+    name: Upload Release Asset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '1.18'
+      - name: Cache Go modules
+        id: cache-go-mod
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-1.18
+          restore-keys: ${{ runner.os }}-go-1.18
+      - name: Apt Install ...
+        run: sudo apt-get update; sudo apt-get install libpcap-dev # install libpcap for gopcap-sdk
+      - name: Build project
+        run: make release_assert
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref }}
+          release_name: Release ${{ github.ref }}
+          draft: false
+          prerelease: false
+      - name: Upload to Release darwin_arm64
+        id: upload-release-asset-darwin_arm64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/devtool_darwin_arm64.zip
+          asset_name: devtool_darwin_arm64.zip
+          asset_content_type: application/zip
+      - name: Upload to Release darwin_amd64
+        id: upload-release-asset-darwin_amd64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/devtool_darwin_amd64.zip
+          asset_name: devtool_darwin_amd64.zip
+          asset_content_type: application/zip
+      - name: Upload to Release linux_amd64
+        id: upload-release-asset-linux_amd64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/devtool_linux_amd64.zip
+          asset_name: devtool_linux_amd64.zip
+          asset_content_type: application/zip
+      - name: Upload to Release windows_amd64
+        id: upload-release-asset-windows_amd64
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./bin/devtool_windows_amd64.zip
+          asset_name: devtool_windows_amd64.zip
+          asset_content_type: application/zip
