@@ -1,16 +1,19 @@
-.PHONY: build test coverage release
+.PHONY: build test coverage release install
 default: build
 
 build:
 	bash -ex build.sh
 
 test:
-	@go test ./... -coverprofile=coverage.out
+	@go test -count=1 ./... -coverprofile=coverage.out
 
-coverage:
+coverage: test
 	@go tool cover -func=coverage.out
 	@go tool cover -html=coverage.out
 	@rm coverage.out
 
 release:
 	bash -ex build.sh cors
+
+install:
+	bash -ex build.sh install

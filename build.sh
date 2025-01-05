@@ -11,6 +11,12 @@ function cross_go_build(){
   CGO_ENABLED=0 GOOS=$1 GOARCH=$2 go build "${build_flag[@]}" -o "bin/$1_$2/$binary"
 }
 
+function go_install(){
+  binary="jsonui"
+  output="$(go env GOPATH)/bin/$binary"
+  go build -v "${build_flag[@]}" -o "$output"
+}
+
 function format_golang_file () {
   project_dir=$(realpath "$1")
 	# shellcheck disable=SC2044
@@ -28,6 +34,9 @@ cors)
   cross_go_build linux arm64
   cross_go_build darwin arm64
   zip -j bin/jsonui.zip bin/*
+  ;;
+install)
+  go_install
   ;;
 format)
   format_golang_file . "github.com/anthony-dong/jsonui"
