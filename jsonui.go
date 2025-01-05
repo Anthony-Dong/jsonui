@@ -248,21 +248,22 @@ func layout(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 	for _, view := range views {
 		x0, y0, x1, y1 := viewPositions[view].getCoordinates(maxX, maxY)
-		v, err := g.SetView(view, x0, y0, x1, y1)
-		if err != nil && err != gocui.ErrUnknownView {
-			return err
-		}
-		v.SelFgColor = gocui.ColorBlack
-		v.SelBgColor = gocui.ColorGreen
+		if v, err := g.SetView(view, x0, y0, x1, y1); err != nil {
+			if err != gocui.ErrUnknownView {
+				return err
+			}
+			v.SelFgColor = gocui.ColorBlack
+			v.SelBgColor = gocui.ColorGreen
 
-		v.Title = " " + view + " "
-		if v.Name() == treeView {
-			v.Highlight = true
-			drawTree(g, tree)
-			// v.Autoscroll = true
-		}
-		if v.Name() == textView {
-			drawJSON(g)
+			v.Title = " " + view + " "
+			if v.Name() == treeView {
+				v.Highlight = true
+				drawTree(g, tree)
+				// v.Autoscroll = true
+			}
+			if v.Name() == textView {
+				drawJSON(g)
+			}
 		}
 	}
 	if helpWindowToggle {
