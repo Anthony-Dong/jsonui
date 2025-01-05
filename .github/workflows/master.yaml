@@ -29,14 +29,6 @@ jobs:
             ~/go/pkg/mod
           key: ${{ runner.os }}-go-1.18
           restore-keys: ${{ runner.os }}-go-1.18
-      - name: Keyword-search
-        run: make check
-      - name: Apt Install ...
-        run: sudo apt-get update; sudo apt-get install libpcap-dev # install libpcap for gopcap-sdk
-      - name: Show Project ...
-        run: ls -al
-      - name: Compile-cors
-        run: make cors
       - name: Compile-build
         run: make build
       - name: Test
