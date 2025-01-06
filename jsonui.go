@@ -60,20 +60,20 @@ var viewPositions = map[string]viewPosition{
 	treeView: {
 		position{0.0, 0},
 		position{0.0, 0},
-		position{0.3, 2},
-		position{0.9, 2},
+		position{0.3, 1},
+		position{0.9, 1},
 	},
 	textView: {
 		position{0.3, 0},
 		position{0.0, 0},
-		position{1.0, 2},
-		position{0.9, 2},
+		position{1.0, 1},
+		position{0.9, 1},
 	},
 	pathView: {
 		position{0.0, 0},
 		position{0.89, 0},
-		position{1.0, 2},
-		position{1.0, 2},
+		position{1.0, 1},
+		position{1.0, 1},
 	},
 }
 
@@ -94,6 +94,42 @@ func bindingDirectionKey(g *gocui.Gui, viewName string) error {
 		return err
 	}
 
+	down := func(line int) func(g *gocui.Gui, v *gocui.View) error {
+		return func(g *gocui.Gui, v *gocui.View) error {
+			cx, cy := v.Cursor()
+			ox, oy := v.Origin()
+			lines := len(v.BufferLines())
+			if oy+cy == lines-1 {
+				return nil
+			}
+			if oy+cy+line > lines {
+				line = (lines - 1) - (oy + cy)
+			}
+			if err := v.SetCursor(cx, cy+line); err != nil {
+				return v.SetOrigin(ox, oy+line)
+			}
+			return nil
+		}
+	}
+	up := func(line int) func(g *gocui.Gui, v *gocui.View) error {
+		return func(g *gocui.Gui, v *gocui.View) error {
+			cx, cy := v.Cursor()
+			ox, oy := v.Origin()
+			if cy+oy == 0 {
+				return nil
+			}
+			if err := v.SetCursor(cx, cy-line); err != nil {
+				index := oy - line
+				if index < 0 {
+					v.SetCursor(cx, 0)
+					v.SetOrigin(ox, 0)
+					return nil
+				}
+				return v.SetOrigin(ox, index)
+			}
+			return nil
+		}
+	}
 	if err := g.SetKeybinding(viewName, gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
 		vx, vy := v.Cursor()
 		ox, oy := v.Origin()
@@ -105,30 +141,44 @@ func bindingDirectionKey(g *gocui.Gui, viewName string) error {
 		return err
 	}
 
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowUp, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		vx, vy := v.Cursor()
-		ox, oy := v.Origin()
-		if vy+oy == 0 {
-			return nil
-		}
-		if err := v.SetCursor(vx, vy-1); err != nil {
-			return v.SetOrigin(ox, oy-1)
-		}
-		return nil
+	if err := g.SetKeybinding(viewName, gocui.KeyArrowUp, gocui.ModNone, up(1)); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyArrowDown, gocui.ModNone, down(1)); err != nil {
+		return err
+	}
+
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlY, gocui.ModNone, up(1)); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlE, gocui.ModNone, down(1)); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlF, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		_, sy := v.Size()
+		return down(sy)(g, v)
+	}); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlB, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		_, sy := v.Size()
+		return up(sy)(g, v)
+	}); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		_, sy := v.Size()
+		return down(sy/2)(g, v)
+	}); err != nil {
+		return err
+	}
+	if err := g.SetKeybinding(viewName, gocui.KeyCtrlU, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
+		_, sy := v.Size()
+		return up(sy/2)(g, v)
 	}); err != nil {
 		return err
 	}
 
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowDown, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		vx, vy := v.Cursor()
-		ox, oy := v.Origin()
-		if err := v.SetCursor(vx, vy+1); err != nil {
-			return v.SetOrigin(ox, oy+1)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -143,23 +193,19 @@ func initGUI(g *gocui.Gui) {
 		log.Panicln(err)
 	}
 
-	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
-		if view.Name() == treeView {
-			currentViewName = textView
-			drawJSON(gui)
-			return nil
-		}
-		if view.Name() == textView {
-			currentViewName = treeView
-			drawJSON(gui)
-		}
-		return nil
-	}); err != nil {
+	/**
+	switch view
+	*/
+	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
+		log.Panicln(err)
+	}
+	if err := g.SetKeybinding(treeView, gocui.KeyEnter, gocui.ModNone, switchView); err != nil {
 		log.Panicln(err)
 	}
 	if err := bindingDirectionKey(g, textView); err != nil {
 		log.Panicln(err)
 	}
+
 	if err := g.SetKeybinding(treeView, gocui.KeyCtrlY, gocui.ModNone, cursorMovement(-1)); err != nil {
 		log.Panicln(err)
 	}
@@ -208,12 +254,7 @@ func initGUI(g *gocui.Gui) {
 	}); err != nil {
 		log.Panicln(err)
 	}
-	g.SetKeybinding(treeView, 'f', gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
-		formatData = !formatData
-		drawJSON(g)
-		drawPath(g)
-		return nil
-	})
+	g.SetKeybinding("", 'f', gocui.ModNone, formatView)
 	if err := g.SetKeybinding(treeView, 'e', gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
 		if expandAllStatus {
 			expandAllStatus = false
@@ -502,4 +543,24 @@ func toggleHelp(g *gocui.Gui, v *gocui.View) error {
 
 func quit(g *gocui.Gui, v *gocui.View) error {
 	return gocui.ErrQuit
+}
+
+func switchView(gui *gocui.Gui, view *gocui.View) error {
+	if view.Name() == treeView {
+		currentViewName = textView
+		drawJSON(gui)
+		return nil
+	}
+	if view.Name() == textView {
+		currentViewName = treeView
+		drawJSON(gui)
+	}
+	return nil
+}
+
+func formatView(gui *gocui.Gui, view *gocui.View) error {
+	formatData = !formatData
+	drawJSON(gui)
+	drawPath(gui)
+	return nil
 }
