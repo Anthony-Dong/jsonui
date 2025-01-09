@@ -6,4 +6,5 @@ require (
 	github.com/atotto/clipboard v0.1.4
 	github.com/jroimartin/gocui v0.5.0
 	github.com/mattn/go-runewidth v0.0.9
+	golang.org/x/sync v0.10.0
 )

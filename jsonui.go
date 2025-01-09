@@ -1,14 +1,17 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"fmt"
+	"github.com/anthony-dong/jsonui/internal"
+	"github.com/atotto/clipboard"
+	"golang.org/x/sync/errgroup"
 	"io/ioutil"
 	"log"
 	"math"
-	"strconv"
 	"strings"
-
-	"github.com/atotto/clipboard"
+	"time"
 
 	"github.com/jroimartin/gocui"
 )
@@ -78,171 +81,63 @@ var viewPositions = map[string]viewPosition{
 }
 
 var tree treeNode
+var treeController internal.ViewBufferController
+var textController internal.ViewBufferController
+var rootTextController internal.ViewBufferController
 
-func bindingDirectionKey(g *gocui.Gui, viewName string) error {
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowLeft, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		vx, vy := v.Cursor()
-		ox, oy := v.Origin()
-		if vx+ox == 0 {
-			return nil
+var helpMessage = ""
+
+func initController() error {
+	helpMessage = initHelpMsg().String()
+	wg := errgroup.Group{}
+	wg.Go(func() error {
+		buf := bytes.NewBuffer(make([]byte, 0, 1024*1024))
+		if err := tree.draw(buf, 0); err != nil {
+			return err
 		}
-		if err := v.SetCursor(vx-1, vy); err != nil {
-			return v.SetOrigin(ox-1, oy)
-		}
+		treeController.Write(buf.Bytes())
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	down := func(line int) func(g *gocui.Gui, v *gocui.View) error {
-		return func(g *gocui.Gui, v *gocui.View) error {
-			cx, cy := v.Cursor()
-			ox, oy := v.Origin()
-			lines := len(v.BufferLines())
-			if oy+cy == lines-1 {
-				return nil
-			}
-			if oy+cy+line > lines {
-				line = (lines - 1) - (oy + cy)
-			}
-			if err := v.SetCursor(cx, cy+line); err != nil {
-				return v.SetOrigin(ox, oy+line)
-			}
-			return nil
-		}
-	}
-	up := func(line int) func(g *gocui.Gui, v *gocui.View) error {
-		return func(g *gocui.Gui, v *gocui.View) error {
-			cx, cy := v.Cursor()
-			ox, oy := v.Origin()
-			if cy+oy == 0 {
-				return nil
-			}
-			if err := v.SetCursor(cx, cy-line); err != nil {
-				index := oy - line
-				if index < 0 {
-					v.SetCursor(cx, 0)
-					v.SetOrigin(ox, 0)
-					return nil
-				}
-				return v.SetOrigin(ox, index)
-			}
-			return nil
-		}
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowRight, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		vx, vy := v.Cursor()
-		ox, oy := v.Origin()
-		if err := v.SetCursor(vx+1, vy); err != nil {
-			return v.SetOrigin(ox+1, oy)
-		}
+	})
+	wg.Go(func() error {
+		data := tree.String(jsonPadding)
+		textController.WriteString(data)
+		rootTextController.WriteString(data)
 		return nil
-	}); err != nil {
-		return err
-	}
-
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowUp, gocui.ModNone, up(1)); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyArrowDown, gocui.ModNone, down(1)); err != nil {
-		return err
-	}
-
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlY, gocui.ModNone, up(1)); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlE, gocui.ModNone, down(1)); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlF, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		_, sy := v.Size()
-		return down(sy)(g, v)
-	}); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlB, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		_, sy := v.Size()
-		return up(sy)(g, v)
-	}); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlD, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		_, sy := v.Size()
-		return down(sy/2)(g, v)
-	}); err != nil {
-		return err
-	}
-	if err := g.SetKeybinding(viewName, gocui.KeyCtrlU, gocui.ModNone, func(g *gocui.Gui, v *gocui.View) error {
-		_, sy := v.Size()
-		return up(sy/2)(g, v)
-	}); err != nil {
-		return err
-	}
-
-	return nil
+	})
+	return wg.Wait()
 }
 
 func initGUI(g *gocui.Gui) {
+	if err := initController(); err != nil {
+		return
+	}
 	g.Cursor = true
 	g.SetManagerFunc(layout)
 
-	if err := g.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding("", 'q', gocui.ModNone, quit); err != nil {
-		log.Panicln(err)
-	}
+	internal.MultiSetKeybinding(g, "", []interface{}{gocui.KeyCtrlC, 'q'}, internal.Quit)
 
-	/**
-	switch view
-	*/
 	if err := g.SetKeybinding("", gocui.KeyTab, gocui.ModNone, switchView); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding(treeView, gocui.KeyEnter, gocui.ModNone, switchView); err != nil {
 		log.Panicln(err)
 	}
-	if err := bindingDirectionKey(g, textView); err != nil {
+	if err := internal.BindingDirectionKey(g, textView, &textController); err != nil {
 		log.Panicln(err)
 	}
 
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlY, gocui.ModNone, cursorMovement(-1)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlE, gocui.ModNone, cursorMovement(1)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyArrowUp, gocui.ModNone, cursorMovement(-1)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyArrowDown, gocui.ModNone, cursorMovement(1)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlU, gocui.ModNone, cursorMovement(-15)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlD, gocui.ModNone, cursorMovement(15)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlB, gocui.ModNone, cursorMovement(-15)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyCtrlF, gocui.ModNone, cursorMovement(15)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyPgup, gocui.ModNone, cursorMovement(-15)); err != nil {
-		log.Panicln(err)
-	}
-	if err := g.SetKeybinding(treeView, gocui.KeyPgdn, gocui.ModNone, cursorMovement(15)); err != nil {
-		log.Panicln(err)
-	}
+	internal.MultiSetKeybinding(g, treeView, []interface{}{gocui.KeyCtrlY, gocui.KeyArrowUp}, cursorMovement(-1))
+	internal.MultiSetKeybinding(g, treeView, []interface{}{gocui.KeyCtrlE, gocui.KeyArrowDown}, cursorMovement(1))
+	internal.MultiSetKeybinding(g, treeView, []interface{}{gocui.KeyCtrlU, gocui.KeyPgup, gocui.KeyCtrlB}, cursorMovement(-15))
+	internal.MultiSetKeybinding(g, treeView, []interface{}{gocui.KeyCtrlD, gocui.KeyPgdn, gocui.KeyCtrlF}, cursorMovement(15))
+
 	if err := g.SetKeybinding(treeView, gocui.KeyArrowRight, gocui.ModNone, toggleExpand); err != nil {
 		log.Panicln(err)
 	}
 	if err := g.SetKeybinding(treeView, gocui.KeyArrowLeft, gocui.ModNone, toggleExpand); err != nil {
 		log.Panicln(err)
 	}
-	if err := g.SetKeybinding(treeView, 'c', gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
+	if err := g.SetKeybinding("", 'c', gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
 		p := findTreePosition(g)
 		subTree := tree.find(p)
 		data := subTree.String(2)
@@ -254,7 +149,9 @@ func initGUI(g *gocui.Gui) {
 	}); err != nil {
 		log.Panicln(err)
 	}
-	g.SetKeybinding("", 'f', gocui.ModNone, formatView)
+	if err := g.SetKeybinding("", 'f', gocui.ModNone, formatView); err != nil {
+		log.Panicln(err)
+	}
 	if err := g.SetKeybinding(treeView, 'e', gocui.ModNone, func(gui *gocui.Gui, view *gocui.View) error {
 		if expandAllStatus {
 			expandAllStatus = false
@@ -271,17 +168,8 @@ func initGUI(g *gocui.Gui) {
 	if err := g.SetKeybinding("", '?', gocui.ModNone, toggleHelp); err != nil {
 		log.Panicln(err)
 	}
-	if _, err := g.SetCurrentView(treeView); err != nil {
-		log.Println(err)
-	}
 	g.SelFgColor = gocui.ColorBlack
 	g.SelBgColor = gocui.ColorGreen
-}
-
-var helpMessage = ""
-
-func init() {
-	helpMessage = initHelpMsg().String()
 }
 
 func layout(g *gocui.Gui) error {
@@ -295,15 +183,21 @@ func layout(g *gocui.Gui) error {
 			}
 			v.SelFgColor = gocui.ColorBlack
 			v.SelBgColor = gocui.ColorGreen
-
 			v.Title = " " + view + " "
 			if v.Name() == treeView {
 				v.Highlight = true
-				drawTree(g, tree)
-				// v.Autoscroll = true
+				if err := treeController.Draw(v); err != nil {
+					return err
+				}
 			}
 			if v.Name() == textView {
-				drawJSON(g)
+				if err := textController.Draw(v); err != nil {
+					return err
+				}
+				v.Title = fmt.Sprintf(` %s [lines=%d]`, views, len(textController.Lines))
+			}
+			if v.Name() == pathView {
+				v.Wrap = true
 			}
 		}
 	}
@@ -351,7 +245,7 @@ func drawPath(g *gocui.Gui) error {
 	}
 	p := getPath(g)
 	if formatData {
-		p = p + " (format)"
+		p = p + " (EnableFormat)"
 	}
 	pv.Clear()
 	pv.SetOrigin(0, 0)
@@ -363,65 +257,31 @@ func drawPath(g *gocui.Gui) error {
 func drawJSON(g *gocui.Gui) error {
 	dv, err := g.View(textView)
 	if err != nil {
-		log.Fatal("failed to get textView", err)
+		return err
 	}
-	if currentViewName == treeView {
-		return drawSimpleJSON(g, dv)
+	path := findTreePosition(g)
+	if len(path) == 0 {
+		return rootTextController.Draw(dv)
 	}
-	treeTodraw := tree.find(findTreePosition(g))
-	if treeTodraw == nil {
+	treeToDraw := tree.find(path)
+	if treeToDraw == nil {
 		return nil
 	}
-	data := treeTodraw.String(jsonPadding)
-	dv.Clear()
-	dv.SetOrigin(0, 0)
-	dv.SetCursor(0, 0)
+	var data = ""
+	if err := internal.RunWithTimeout(context.Background(), time.Second, func() error {
+		data = treeToDraw.String(jsonPadding)
+		return nil
+	}); err != nil {
+		return textController.ReDraw(dv, []byte("Error: 超时"))
+	}
 	if formatData {
 		data = FormatData(data)
 	}
-	Printf(dv, data)
-	return nil
-}
-
-var jsonCache = newCacheData(1024 * 10)
-
-func drawSimpleJSON(g *gocui.Gui, dv *gocui.View) error {
-	_, y := dv.Size()
-	p := findTreePosition(g)
-	key := strings.Join(p, "|") + "#" + strconv.Itoa(y) + "#" + strconv.FormatBool(formatData)
-	value, _ := jsonCache.getOrStore(key, func() interface{} {
-		treeTodraw := tree.find(p)
-		if treeTodraw == nil {
-			return ""
-		}
-		data := treeTodraw.String(jsonPadding)
-		if formatData {
-			data = FormatData(data)
-		}
-		return limitLineData(data, y)
-	})
-	data := value.(string)
-	if value != "" {
-		dv.Clear()
-		dv.SetOrigin(0, 0)
-		dv.SetCursor(0, 0)
-		Printf(dv, data)
+	if err := textController.ReDraw(dv, internal.String2Bytes(data)); err != nil {
+		return err
 	}
+	dv.Title = fmt.Sprintf(" text [lines=%d] ", len(textController.Lines))
 	return nil
-}
-
-func limitLineData(data string, size int) string {
-	lines := strings.SplitN(data, "\n", size+1)
-	if len(lines) == size+1 {
-		return strings.Join(lines[:size], "\n")
-	}
-	return data
-}
-
-func lineBelow(v *gocui.View, d int) bool {
-	_, y := v.Cursor()
-	line, err := v.Line(y + d)
-	return err == nil && line != ""
 }
 
 func countIndex(s string) int {
@@ -432,11 +292,6 @@ func countIndex(s string) int {
 		}
 	}
 	return count
-}
-
-func getLine(s string, y int) string {
-	lines := strings.Split(s, "\n")
-	return lines[y]
 }
 
 var cleanPatterns = []string{
@@ -454,16 +309,13 @@ func findTreePosition(g *gocui.Gui) treePosition {
 	}
 	path := treePosition{}
 	ci := -1
-	_, yOffset := v.Origin()
 	_, yCurrent := v.Cursor()
-	y := yOffset + yCurrent
-	s := v.Buffer()
+	y := treeController.Origin + yCurrent
 	for cy := y; cy >= 0; cy-- {
-		line := getLine(s, cy)
+		line := string(treeController.Lines[cy])
 		for _, pattern := range cleanPatterns {
 			line = strings.Replace(line, pattern, "", -1)
 		}
-
 		if count := countIndex(line); count < ci || ci == -1 {
 			path = append(path, strings.TrimSpace(line))
 			ci = count
@@ -477,28 +329,16 @@ func findTreePosition(g *gocui.Gui) treePosition {
 	return path[1:]
 }
 
-// This is a workaround for not having a Buffer
-// function in gocui
-func bufferLen(v *gocui.View) int {
-	s := v.Buffer()
-	return len(strings.Split(s, "\n")) - 1
-}
-
 func drawTree(g *gocui.Gui, tree treeNode) error {
 	tv, err := g.View(treeView)
 	if err != nil {
 		log.Fatal("failed to get treeView", err)
 	}
-	tv.Clear()
-	tree.draw(tv, 0)
-	maxY := bufferLen(tv)
-	cx, cy := tv.Cursor()
-	lastLine := maxY - 2
-	if cy > lastLine {
-		tv.SetCursor(cx, lastLine)
-		tv.SetOrigin(0, 0)
+	buf := bytes.NewBuffer(make([]byte, 0, 1024*1024))
+	if err := tree.draw(buf, 0); err != nil {
+		return err
 	}
-	return nil
+	return treeController.ReDraw(tv, buf.Bytes())
 }
 
 func expandAll(g *gocui.Gui) error {
@@ -520,19 +360,9 @@ func toggleExpand(g *gocui.Gui, v *gocui.View) error {
 
 func cursorMovement(d int) func(g *gocui.Gui, v *gocui.View) error {
 	return func(g *gocui.Gui, v *gocui.View) error {
-		dir := 1
-		if d < 0 {
-			dir = -1
-		}
-		distance := int(math.Abs(float64(d)))
-		for ; distance > 0; distance-- {
-			if lineBelow(v, distance*dir) {
-				v.MoveCursor(0, distance*dir, false)
-				drawJSON(g)
-				drawPath(g)
-				return nil
-			}
-		}
+		_ = treeController.MoveCursor(v, 0, d)
+		_ = drawJSON(g)
+		_ = drawPath(g)
 		return nil
 	}
 }
@@ -541,19 +371,13 @@ func toggleHelp(g *gocui.Gui, v *gocui.View) error {
 	return nil
 }
 
-func quit(g *gocui.Gui, v *gocui.View) error {
-	return gocui.ErrQuit
-}
-
 func switchView(gui *gocui.Gui, view *gocui.View) error {
 	if view.Name() == treeView {
 		currentViewName = textView
-		drawJSON(gui)
 		return nil
 	}
 	if view.Name() == textView {
 		currentViewName = treeView
-		drawJSON(gui)
 	}
 	return nil
 }

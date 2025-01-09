@@ -1,22 +1,15 @@
-# copyright 
-
-https://github.com/gulyasm/jsonui
-
 # JSONUI
-[![](https://travis-ci.org/gulyasm/jsonui.svg?branch=master)](https://travis-ci.org/gulyasm/jsonui) [![](https://goreportcard.com/badge/github.com/anthony-dong/jsonui)](https://goreportcard.com/report/github.com/anthony-dong/jsonui)
 
-`jsonui` is an interactive JSON explorer in your command line. You can pipe any JSON into `jsonui` and explore it, copy the path for each element.
+1. 支持大JSON解析，优化了数据量大卡顿的问题 (10w+key 无压力)
+2. 支持数据 Format 
+3. 支持数据 拷贝
 
 ![](img/jsonui.gif)
 
-## Install
+## 安装
 `go install -v github.com/anthony-dong/jsonui@master`
 
-## Binary Releases
-[Binary releases are availabe](https://github.com/anthony-dong/jsonui/releases)
-
-## Usage
-Just use the standard output:
+## 使用方式
 ```
 cat example.json | jsonui
 
@@ -25,7 +18,7 @@ jsonui -r example.json
 jsonui < example.json
 ```
 
-### Keys
+### 快捷键
 
 ```shell
 ctrl+e/ArrowDown = Move a line down   
@@ -38,7 +31,6 @@ q/ctrl+c         = Exit
 h/?              = Toggle help message
 ```
 
+# copyright
 
-## Acknowledgments
-Special thanks for [asciimoo](https://github.com/asciimoo) and the [wuzz](https://github.com/asciimoo/wuzz) project for all the help and suggestions.  
-
+https://github.com/gulyasm/jsonui
