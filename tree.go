@@ -71,6 +71,7 @@ func (n baseTreeNode) expIcon() string {
 type complexNode struct {
 	baseTreeNode
 	data *orderedmap.OrderedMap
+	raw  *orderedmap.OrderedMap
 }
 
 func (n *complexNode) collapseAll() {
@@ -91,8 +92,8 @@ func (n complexNode) isCollapsable() bool {
 }
 func (n complexNode) search(query string) (treeNode, error) {
 	filteredNode := &complexNode{
-		baseTreeNode{true},
-		orderedmap.New(),
+		baseTreeNode: baseTreeNode{true},
+		data:         orderedmap.New(),
 	}
 	n.data.Foreach(func(key string, value interface{}) {
 		if key == query {
@@ -131,6 +132,9 @@ func (n complexNode) find(tp treePosition) treeNode {
 }
 
 func (n complexNode) String(indent int) string {
+	if n.raw != nil {
+		return encodeJson(n.raw, indent)
+	}
 	result := orderedmap.NewWithSize(n.data.Size())
 	result.SetUseNumber(true)
 	result.SetEscapeHTML(true)
@@ -182,6 +186,7 @@ func (n complexNode) filter(query query) bool {
 type listNode struct {
 	baseTreeNode
 	data []treeNode
+	raw  []interface{}
 }
 
 func (n *listNode) collapseAll() {
@@ -220,11 +225,7 @@ func (n listNode) find(tp treePosition) treeNode {
 }
 
 func (n listNode) String(indent int) string {
-	list := make([]json.RawMessage, 0)
-	for _, elem := range n.data {
-		list = append(list, json.RawMessage(elem.String(indent)))
-	}
-	return encodeJson(list, indent)
+	return encodeJson(n.raw, indent)
 }
 
 func (n listNode) draw(writer io.Writer, level int) error {
@@ -437,8 +438,9 @@ func newTree(y interface{}) (treeNode, error) {
 			data = append(data, listItem)
 		}
 		tree = &listNode{
-			baseTreeNode{true},
-			data,
+			baseTreeNode: baseTreeNode{true},
+			data:         data,
+			raw:          v,
 		}
 	default:
 		tree = &stringNode{baseTreeNode{true}, "TODO"}
@@ -463,8 +465,9 @@ func newComplexNode(v interface{}) (treeNode, error) {
 		return nil, err
 	}
 	tree = &complexNode{
-		baseTreeNode{true},
-		data,
+		baseTreeNode: baseTreeNode{true},
+		data:         data,
+		raw:          orderMap,
 	}
 	return tree, nil
 }

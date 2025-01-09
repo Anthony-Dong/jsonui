@@ -1,76 +1,8 @@
 package main
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
-	"io"
 	"os"
-	"strconv"
-	"strings"
-
-	"github.com/mattn/go-runewidth"
 )
-
-func Printf(w io.Writer, format string, args ...interface{}) {
-	if len(args) == 0 {
-		w.Write([]byte(terminalLine(format)))
-		return
-	}
-	w.Write([]byte(terminalLine(fmt.Sprintf(format, args...))))
-}
-
-func Println(w io.Writer, format string, args ...interface{}) {
-	if len(args) == 0 {
-		w.Write([]byte(terminalLine(format)))
-		w.Write([]byte{'\n'})
-		return
-	}
-	w.Write([]byte(terminalLine(fmt.Sprintf(format, args...))))
-	w.Write([]byte{'\n'})
-}
-
-func terminalLine(line string) string {
-	var lineWithWidth = bytes.NewBuffer(make([]byte, 0, len(line)))
-	for _, r := range line {
-		w := runewidth.RuneWidth(r)
-		if w == 0 {
-			w = 1
-		}
-		lineWithWidth.WriteString(string(r))
-		for i := 1; i < w; i++ {
-			lineWithWidth.WriteString(" ")
-		}
-	}
-	return lineWithWidth.String()
-}
-
-func FormatData(input string) string {
-	if input == "" {
-		return input
-	}
-	input = strings.TrimSpace(input)
-	if input[0] == '"' {
-		unquote, err := strconv.Unquote(input)
-		if err != nil {
-			return input
-		}
-		jsonData, err := prettyJson(unquote)
-		if err != nil {
-			return unquote
-		}
-		return jsonData
-	}
-	return input
-}
-
-func prettyJson(src string) (string, error) {
-	out := bytes.Buffer{}
-	if err := json.Indent(&out, []byte(src), "", "  "); err != nil {
-		return "", err
-	}
-	return out.String(), nil
-}
 
 // 检测标准输入是否来自管道
 func checkStdInFromPiped() bool {

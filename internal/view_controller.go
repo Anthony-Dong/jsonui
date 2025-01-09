@@ -2,8 +2,20 @@ package internal
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/jroimartin/gocui"
 )
+
+type Location struct {
+	TotalY int
+	CurY   int
+	TotalX int
+	CurX   int
+}
+
+func (l *Location) CurrentIndex() string {
+	return fmt.Sprintf("%d:%d", l.CurY, l.CurX)
+}
 
 type ViewBufferController struct {
 	Lines  [][]byte
@@ -11,20 +23,21 @@ type ViewBufferController struct {
 	Size   int
 }
 
+func (c *ViewBufferController) Location(v *gocui.View) *Location {
+	cx, cy := v.Cursor()
+	line := c.getCursorLine(cy)
+	return &Location{
+		TotalY: len(c.Lines),
+		CurY:   cy + c.Origin + 1,
+		TotalX: len(line),
+		CurX:   cx + 1,
+	}
+}
+
 func (c *ViewBufferController) Clear() *ViewBufferController {
 	c.Lines = c.Lines[:0]
 	c.Origin = 0
 	return c
-}
-
-func (c *ViewBufferController) ClearCursor(v *gocui.View) error {
-	if err := v.SetCursor(0, 0); err != nil {
-		return err
-	}
-	if err := v.SetOrigin(0, 0); err != nil {
-		return err
-	}
-	return nil
 }
 
 func (c *ViewBufferController) WriteString(s string) *ViewBufferController {
@@ -44,68 +57,100 @@ func (c *ViewBufferController) Write(data []byte) *ViewBufferController {
 	return c
 }
 
-func (c *ViewBufferController) addCursor(v *gocui.View, inc int) error {
+func (c *ViewBufferController) MoveCursor(v *gocui.View, x, y int) error {
 	cx, cy := v.Cursor()
 	_, sy := v.Size()
-	ncy, noy := incCursor(cy, c.Origin, sy, inc, len(c.Lines))
+
+	ncy, noy := cursorY(cy, c.Origin, sy, y, len(c.Lines))
+	ncx := cursorX(cx, len(c.getCursorLine(cy)), x)
 	if c.Origin != noy {
 		c.Origin = noy
-		_ = v.SetCursor(cx, ncy)
 		if err := c.Draw(v); err != nil {
 			return err
 		}
+	}
+	_ = v.SetCursor(ncx, ncy)
+	return nil
+}
+
+func (c *ViewBufferController) getCursorLine(cy int) []byte {
+	index := cy + c.Origin
+	if index >= len(c.Lines) {
 		return nil
 	}
-	_ = v.SetCursor(cx, ncy)
-	return nil
+	return c.Lines[index]
 }
 
-func (c *ViewBufferController) getCurrentLine(cy int) []byte {
-	return c.Lines[cy+c.Origin]
-}
-
-func (c *ViewBufferController) MoveCursor(v *gocui.View, ix int, iy int) error {
-	if ix != 0 {
-		cx, cy := v.Cursor()
-		_ = v.SetCursor(moveCursor(cx, ix), cy)
+func addCursorX(cx, max int) int {
+	if cx+1 > max {
+		return cx
 	}
-	if iy != 0 {
-		return c.addCursor(v, iy)
-	}
-	return nil
+	return cx + 1
 }
 
-func moveCursor(cx, inc int) (_ int) {
-	if cx+inc <= 0 {
+func subCursorX(cx int) int {
+	if cx-1 < 0 {
 		return 0
 	}
-	return cx + inc
+	return cx - 1
 }
 
-func incCursor(cy int, oy, sy, inc, max int) (int, int) {
-	// 索引大于 max
-	if oy+cy+inc >= max {
-		add := max - (oy + cy + 1)
-		if cy == sy-1 {
-			return cy, oy + add
-		}
-		return cy + add, oy
+func addCursorY(cy, oy, sy, max int) (int, int) {
+	if cy+oy+1 >= max {
+		return cy, oy
 	}
-	// 1. 如果新增后 cy >= sy，那么就cy不变位置
-	if cy+inc >= sy {
-		return sy - 1, oy + (inc - (sy - cy - 1))
+	if cy+1 >= sy {
+		return cy, oy + 1
 	}
-	if cy+inc <= 0 {
-		oy = oy + (inc - cy)
-		if oy <= 0 {
-			oy = 0
-		}
-		return 0, oy
-	}
-	return cy + inc, oy
+	return cy + 1, oy
 }
 
-func (c *ViewBufferController) GetCurView(viewSize int) [][]byte {
+func subCursorY(cy, oy int) (int, int) {
+	if cy == 0 {
+		if oy-1 <= 0 {
+			return 0, 0
+		}
+		return 0, oy - 1
+	}
+	return cy - 1, oy
+}
+
+func abs(a int) (int, bool) {
+	if a < 0 {
+		return -a, false
+	}
+	return a, true
+}
+
+func cursorX(cx, max int, inc int) int {
+	inc, isInc := abs(inc)
+	if isInc {
+		for x := 0; x < inc; x++ {
+			cx = addCursorX(cx, max)
+		}
+		return cx
+	}
+	for x := 0; x < inc; x++ {
+		cx = subCursorX(cx)
+	}
+	return cx
+}
+
+func cursorY(cy int, oy, sy, inc, max int) (int, int) {
+	inc, isInc := abs(inc)
+	if isInc {
+		for x := 0; x < inc; x++ {
+			cy, oy = addCursorY(cy, oy, sy, max)
+		}
+		return cy, oy
+	}
+	for x := 0; x < inc; x++ {
+		cy, oy = subCursorY(cy, oy)
+	}
+	return cy, oy
+}
+
+func (c *ViewBufferController) getCurView(viewSize int) [][]byte {
 	data := c.Lines[c.Origin:]
 	if len(data) <= viewSize {
 		return data
@@ -115,13 +160,12 @@ func (c *ViewBufferController) GetCurView(viewSize int) [][]byte {
 
 func (c *ViewBufferController) getCurViewData(v *gocui.View) []byte {
 	_, y := v.Size()
-	return bytes.Join(c.GetCurView(y), []byte{})
+	return bytes.Join(c.getCurView(y), []byte{})
 }
 
 func (c *ViewBufferController) Draw(v *gocui.View) error {
 	v.Clear()
-	data := c.getCurViewData(v)
-	if _, err := v.Write(TerminalBytes(data)); err != nil {
+	if _, err := v.Write(TerminalBytes(c.getCurViewData(v))); err != nil {
 		return err
 	}
 	return nil

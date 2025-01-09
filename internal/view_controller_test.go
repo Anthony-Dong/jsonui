@@ -64,3 +64,21 @@ func TestViewBufferController_GetCurView(t *testing.T) {
 	}
 	t.Log(c.GetCurView(10))
 }
+
+func Test_addCursorY(t *testing.T) {
+	sy := 10
+	oy := 0
+	cy := 0
+	Max := 5
+	for x := 0; x < 20; x++ {
+		cy, oy = addCursorY(cy, oy, sy, Max)
+		t.Log(cy, oy)
+	}
+
+	t.Log("===")
+
+	for x := 0; x < 20; x++ {
+		cy, oy = subCursorY(cy, oy)
+		t.Log(cy, oy)
+	}
+}

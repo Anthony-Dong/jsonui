@@ -4,14 +4,14 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/anthony-dong/jsonui/internal"
-	"github.com/atotto/clipboard"
-	"golang.org/x/sync/errgroup"
-	"io/ioutil"
 	"log"
 	"math"
 	"strings"
 	"time"
+
+	"github.com/anthony-dong/jsonui/internal"
+	"github.com/atotto/clipboard"
+	"golang.org/x/sync/errgroup"
 
 	"github.com/jroimartin/gocui"
 )
@@ -19,10 +19,11 @@ import (
 const VERSION = "1.0.1"
 
 const (
-	treeView = "tree"
-	textView = "text"
-	pathView = "path"
-	helpView = "help"
+	treeView     = "tree"
+	textView     = "text"
+	pathView     = "path"
+	helpView     = "help"
+	locationView = "line"
 )
 
 const jsonPadding = 2
@@ -39,11 +40,6 @@ func (p position) getCoordinate(max int) int {
 
 type viewPosition struct {
 	x0, y0, x1, y1 position
-}
-
-func logFile(s string) error {
-	d1 := []byte(s + "\n")
-	return ioutil.WriteFile("log.txt", d1, 0644)
 }
 
 func (vp viewPosition) getCoordinates(maxX, maxY int) (int, int, int, int) {
@@ -142,7 +138,7 @@ func initGUI(g *gocui.Gui) {
 		subTree := tree.find(p)
 		data := subTree.String(2)
 		if formatData {
-			data = FormatData(data)
+			data = internal.FormatData(data)
 		}
 		_ = clipboard.WriteAll(data)
 		return nil
@@ -172,6 +168,39 @@ func initGUI(g *gocui.Gui) {
 	g.SelBgColor = gocui.ColorGreen
 }
 
+func drawLocation(g *gocui.Gui, x1, y1 int) {
+	view, _ := g.View(textView)
+	if view == nil {
+		return
+	}
+	location := textController.Location(view).CurrentIndex()
+	lv, _ := g.SetView(locationView, x1-len(location)-1, y1-2, x1, y1)
+	if lv == nil {
+		return
+	}
+	lv.Clear()
+	_, _ = lv.Write(internal.String2Bytes(location))
+}
+
+func drawHelp(g *gocui.Gui, maxX, maxY int) error {
+	if helpWindowToggle {
+		height := strings.Count(helpMessage, "\n") + 1
+		width := -1
+		for _, line := range strings.Split(helpMessage, "\n") {
+			width = int(math.Max(float64(width), float64(len(line)+2)))
+		}
+		if v, err := g.SetView(helpView, maxX/2-width/2, maxY/2-height/2, maxX/2+width/2, maxY/2+height/2); err != nil {
+			if err != gocui.ErrUnknownView {
+				log.Fatal(err)
+			}
+			internal.Println(v, helpMessage)
+		}
+	} else {
+		g.DeleteView(helpView)
+	}
+	return nil
+}
+
 func layout(g *gocui.Gui) error {
 	var views = []string{treeView, textView, pathView}
 	maxX, maxY := g.Size()
@@ -181,6 +210,7 @@ func layout(g *gocui.Gui) error {
 			if err != gocui.ErrUnknownView {
 				return err
 			}
+			// on init
 			v.SelFgColor = gocui.ColorBlack
 			v.SelBgColor = gocui.ColorGreen
 			v.Title = " " + view + " "
@@ -194,27 +224,18 @@ func layout(g *gocui.Gui) error {
 				if err := textController.Draw(v); err != nil {
 					return err
 				}
-				v.Title = fmt.Sprintf(` %s [lines=%d]`, views, len(textController.Lines))
+				v.Title = fmt.Sprintf(` %s [lines=%d]`, view, len(textController.Lines))
 			}
 			if v.Name() == pathView {
 				v.Wrap = true
 			}
 		}
+		if view == textView {
+			drawLocation(g, x1, y1)
+		}
 	}
-	if helpWindowToggle {
-		height := strings.Count(helpMessage, "\n") + 1
-		width := -1
-		for _, line := range strings.Split(helpMessage, "\n") {
-			width = int(math.Max(float64(width), float64(len(line)+2)))
-		}
-		if v, err := g.SetView(helpView, maxX/2-width/2, maxY/2-height/2, maxX/2+width/2, maxY/2+height/2); err != nil {
-			if err != gocui.ErrUnknownView {
-				return err
-			}
-			Println(v, helpMessage)
-		}
-	} else {
-		g.DeleteView(helpView)
+	if err := drawHelp(g, maxX, maxY); err != nil {
+		return err
 	}
 	if currentViewName == "" {
 		currentViewName = treeView
@@ -250,7 +271,7 @@ func drawPath(g *gocui.Gui) error {
 	pv.Clear()
 	pv.SetOrigin(0, 0)
 	pv.SetCursor(0, 0)
-	Printf(pv, p)
+	internal.Printf(pv, p)
 	return nil
 }
 
@@ -275,7 +296,7 @@ func drawJSON(g *gocui.Gui) error {
 		return textController.ReDraw(dv, []byte("Error: 超时"))
 	}
 	if formatData {
-		data = FormatData(data)
+		data = internal.FormatData(data)
 	}
 	if err := textController.ReDraw(dv, internal.String2Bytes(data)); err != nil {
 		return err

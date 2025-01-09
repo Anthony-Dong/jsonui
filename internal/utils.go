@@ -3,13 +3,18 @@ package internal
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
-	"github.com/jroimartin/gocui"
-	"github.com/mattn/go-runewidth"
+	"io"
 	"log"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 	"unsafe"
+
+	"github.com/jroimartin/gocui"
+	"github.com/mattn/go-runewidth"
 )
 
 func TerminalBytes(data []byte) []byte {
@@ -79,4 +84,49 @@ func MultiSetKeybinding(g *gocui.Gui, viewName string, keys []interface{}, handl
 
 func Quit(*gocui.Gui, *gocui.View) error {
 	return gocui.ErrQuit
+}
+
+func FormatData(input string) string {
+	if input == "" {
+		return input
+	}
+	input = strings.TrimSpace(input)
+	if input[0] == '"' {
+		unquote, err := strconv.Unquote(input)
+		if err != nil {
+			return input
+		}
+		jsonData, err := prettyJson(unquote)
+		if err != nil {
+			return unquote
+		}
+		return jsonData
+	}
+	return input
+}
+
+func prettyJson(src string) (string, error) {
+	out := bytes.Buffer{}
+	if err := json.Indent(&out, []byte(src), "", "  "); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func Printf(w io.Writer, format string, args ...interface{}) {
+	if len(args) == 0 {
+		w.Write([]byte(TerminalString(format)))
+		return
+	}
+	w.Write([]byte(TerminalString(fmt.Sprintf(format, args...))))
+}
+
+func Println(w io.Writer, format string, args ...interface{}) {
+	if len(args) == 0 {
+		w.Write([]byte(TerminalString(format)))
+		w.Write([]byte{'\n'})
+		return
+	}
+	w.Write([]byte(TerminalString(fmt.Sprintf(format, args...))))
+	w.Write([]byte{'\n'})
 }
