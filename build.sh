@@ -33,7 +33,7 @@ cors)
   cross_go_build linux amd64
   cross_go_build linux arm64
   cross_go_build darwin arm64
-  zip -j bin/jsonui.zip bin/*
+  zip -r bin/jsonui.zip bin
   ;;
 install)
   go_install

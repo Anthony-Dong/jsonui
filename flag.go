@@ -69,7 +69,14 @@ type flagArgs struct {
 func initFlag() *flagArgs {
 	result := &flagArgs{}
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "JSONUI Usage: %s [-r file]\n", filepath.Base(os.Args[0]))
+		fmt.Fprintf(os.Stderr, `Usage: %s [-r file]
+Examples:
+- %[1]s -r example.json
+- %[1]s < example.json
+- cat example.json | %[1]s
+Help: 
+- https://github.com/anthony-dong/jsonui
+`, filepath.Base(os.Args[0]))
 	}
 	flag.StringVar(&result.File, "r", "", "File to read from")
 	flag.Parse()
