@@ -1,5 +1,7 @@
 name: Upload Release Asset
 
+#Action #General #Workflow permissions #Read and write permissions
+
 on:
   push:
     # Sequence of patterns matched against refs/tags

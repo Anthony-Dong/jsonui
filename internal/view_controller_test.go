@@ -12,12 +12,12 @@ func Test_incCursor(t *testing.T) {
 		cy := 0
 		Max := 5
 		for x := 0; x < 10; x++ {
-			cy, oy = incCursor(cy, oy, sy, 1, Max)
+			cy, oy = cursorY(cy, oy, sy, 1, Max)
 			t.Log(cy, oy)
 		}
 		t.Log("=============")
 		for x := 0; x < 10; x++ {
-			cy, oy = incCursor(cy, oy, sy, -1, Max)
+			cy, oy = cursorY(cy, oy, sy, -1, Max)
 			t.Log(cy, oy)
 		}
 	})
@@ -28,7 +28,7 @@ func Test_incCursor(t *testing.T) {
 		cy := 0
 		Max := 15
 		for x := 0; x < 20; x++ {
-			cy, oy = incCursor(cy, oy, sy, 1, Max)
+			cy, oy = cursorY(cy, oy, sy, 1, Max)
 			t.Log(cy, oy)
 		}
 	})
@@ -39,7 +39,7 @@ func Test_incCursor(t *testing.T) {
 		cy := 0
 		Max := 15
 		for x := 0; x < 20; x++ {
-			cy, oy = incCursor(cy, oy, sy, 10, Max)
+			cy, oy = cursorY(cy, oy, sy, 10, Max)
 			t.Log(cy, oy)
 		}
 		if cy != 9 && oy != 5 {
@@ -47,7 +47,7 @@ func Test_incCursor(t *testing.T) {
 		}
 		t.Log("==")
 		for x := 0; x < 20; x++ {
-			cy, oy = incCursor(cy, oy, sy, -10, Max)
+			cy, oy = cursorY(cy, oy, sy, -10, Max)
 			t.Log(cy, oy)
 		}
 		if cy != 0 && oy != 0 {
@@ -62,7 +62,7 @@ func TestViewBufferController_GetCurView(t *testing.T) {
 	for x := 0; x < 2; x++ {
 		c.WriteString(strconv.Itoa(x))
 	}
-	t.Log(c.GetCurView(10))
+	t.Log(c.getCurView(10))
 }
 
 func Test_addCursorY(t *testing.T) {

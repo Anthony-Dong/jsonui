@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/anthony-dong/jsonui/internal"
 	"testing"
 )
 
@@ -59,5 +60,5 @@ func TestNode(t *testing.T) {
 	t.Log(tree.find([]string{"Data", "0", "JsonRaw"}).String(2))
 
 	data := tree.find([]string{"Data", "0", "JsonRaw"}).String(2)
-	t.Log(FormatData(data))
+	t.Log(internal.FormatData(data))
 }
