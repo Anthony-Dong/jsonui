@@ -29,6 +29,7 @@ c                = Copy node value
 f                = Format node data   
 q/ctrl+c         = Exit               
 h/?              = Toggle help message
+tab              = Switch View
 ```
 
 # copyright
